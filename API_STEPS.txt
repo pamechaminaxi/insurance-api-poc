@@ -1,0 +1,281 @@
+I have created a comprehensive **Postman Testing Guide** organized by role. This will guide you through the authentication flow and provide the exact request bodies needed for each API.
+
+### Pre-requisites
+- **Base URL**: `http://localhost:8000/api` (or your local server URL)
+- **Header**: All protected requests MUST include `Authorization: Bearer [YOUR_TOKEN]`
+- **Header**: `Accept: application/json`
+
+---
+
+### Step 1: Authentication (Common for all)
+Before testing role-specific APIs, you must log in to get your token.
+
+| Action | API Endpoint | Credentials (from Seeder) |
+| :--- | :--- | :--- |
+| **Login as Admin** | `POST /auth/login` | `admin@insurance.com` / `password` |
+| **Login as Agent** | `POST /auth/login` | `agent@insurance.com` / `password` |
+| **Login as Customer** | `POST /auth/login` | `customer@insurance.com` / `password` |
+
+---
+
+### Step 2: Role-Specific Testing
+
+#### 🔑 ADMIN (Full Access)
+| API Name | Method | Endpoint | Body Data (JSON) |
+| :--- | :--- | :--- | :--- |
+| **Register User** | POST | `/auth/register` | `{"name": "New User", "email": "new@test.com", "password": "password", "password_confirmation": "password", "role": "Agent"}` |
+| **View Activity Logs**| GET | `/activity-logs` | None |
+| **Delete Quote** | DELETE | `/quotes/{id}` | None |
+| **Approve/Reject Claim**| PATCH | `/claims/{id}/status` | `{"status": "Approved"}` |
+
+#### 💼 AGENT (Management)
+| API Name | Method | Endpoint | Body Data (JSON) |
+| :--- | :--- | :--- | :--- |
+| **Create Quote** | POST | `/quotes` | `{"customer_name": "John Doe", "customer_user_id": 3, "insurance_type": "motor", "premium_amount": 1200.50}` |
+| **Update Quote** | PUT | `/quotes/{id}` | `{"customer_name": "John Updated", "insurance_type": "life", "premium_amount": 2000}` |
+| **Submit Claim Status**| PATCH | `/claims/{id}/status` | `{"status": "Pending"}` |
+| **Listing** | GET | `/quotes` | None (Sees all customers) |
+
+#### 👤 CUSTOMER (Self-Service)
+| API Name | Method | Endpoint | Body Data (JSON) |
+| :--- | :--- | :--- | :--- |
+| **Create Claim** | POST | `/claims` | `{"quote_id": 1, "claim_amount": 500, "description": "Accident report"}` |
+| **View Own Quotes** | GET | `/quotes` | None (Automatically filtered) |
+| **View Own Claims** | GET | `/claims` | None (Automatically filtered) |
+| **Get Profile** | GET | `/auth/profile` | None |
+
+---
+
+### Important Testing Workflow:
+1.  **Login as Admin** -> Copy Token.
+2.  **Use Admin Token** -> Register a new user or delete a quote.
+3.  **Login as Agent** -> Copy Token.
+4.  **Use Agent Token** -> Create a Quote for the Customer (User ID 3).
+5.  **Use Admin Token** -> Approve that Quote (Status: `approved`).
+6.  **Login as Customer** -> Copy Token.
+7.  **Use Customer Token** -> Create a Claim for that approved Quote.
+
+This sequence ensures you test the full business logic, including the rule that claims can only be created for approved quotes.
+
+
+----------------------------------------------------------------------------------------------------------------------------------
+
+
+To help you understand how the system works from start to finish, here is the **Full End-to-End API Workflow**. 
+
+This sequence follows the lifecycle of an insurance policy, from user creation to claim approval.
+
+---
+
+### Phase 1: User Management (Admin Setup)
+*The system starts with an Admin setting up the participants.*
+
+1.  **POST `/auth/login` (Admin)**: Log in with Admin credentials to get a token.
+2.  **POST `/auth/register` (Admin)**: Register a new **Agent**.
+3.  **POST `/auth/register` (Admin)**: Register a new **Customer**.
+
+---
+
+### Phase 2: Quote Generation (Agent Action)
+*An Agent prepares a pricing quote for the new Customer.*
+
+4.  **POST `/auth/login` (Agent)**: Log in with Agent credentials.
+5.  **POST `/quotes` (Agent)**: Create a new Quote for the Customer (Status is `draft` by default).
+6.  **PUT `/quotes/{id}` (Agent)**: Update the quote to change status to `submitted` (Sending it to Admin for review).
+
+---
+
+### Phase 3: Policy Approval (Admin Action)
+*The Admin reviews the submitted quote and activates the policy.*
+
+7.  **PUT `/quotes/{id}` (Admin)**: Change the quote status to `approved`. 
+    > **Note**: A Quote must be `approved` before any claims can be filed.
+
+---
+
+### Phase 4: Filing a Claim (Customer Action)
+*An incident occurs, and the Customer files a claim against their active policy.*
+
+8.  **POST `/auth/login` (Customer)**: Log in with Customer credentials.
+9.  **GET `/quotes` (Customer)**: View their approved quote ID.
+10. **POST `/claims` (Customer)**: Create a Claim using their `quote_id`. 
+    > **System Rule**: This will fail if the quote is still in `draft` or `submitted`.
+
+---
+
+### Phase 5: Claim Settlement (Agent/Admin Action)
+*The company processes the claim.*
+
+11. **GET `/claims` (Agent)**: List all claims requiring attention.
+12. **PATCH `/claims/{id}/status` (Agent/Admin)**: Update the claim status (e.g., to `Under Review`, `Approved`, or `Rejected`).
+
+---
+
+### Phase 6: Audit & Profile (General)
+*Ongoing monitoring and management.*
+
+13. **GET `/activity-logs` (Admin)**: Review the history of who did what in the system.
+14. **GET `/auth/profile` (Any)**: Check the currently logged-in user's details.
+15. **POST `/auth/logout` (Any)**: Securely exit the system.
+
+---
+
+### Testing Tips for Postman:
+*   **Sequential IDs**: As you create a Quote, note down the `id` returned in the JSON response. You will need it for the Claim creation step.
+*   **Token Management**: Every time you switch roles (Admin to Agent, etc.), you **must** update the `Bearer Token` in your Postman Authorization tab.
+
+
+---------------------------------------------------------------------------------------------------------------------------------------
+
+
+Viewed StoreQuoteRequest.php:2-35
+
+Here is the complete set of JSON request bodies for the **15-step Insurance Workflow**. Use these in Postman to test the entire system flow.
+
+### Phase 1: User Management (Admin Setup)
+
+**1. Login as Admin**
+`POST /auth/login`
+```json
+{
+    "email": "admin@insurance.com",
+    "password": "password"
+}
+```
+
+**2. Register an Agent**
+`POST /auth/register`
+```json
+{
+    "name": "Sarah Agent",
+    "email": "agent_sarah@test.com",
+    "password": "password",
+    "password_confirmation": "password",
+    "role": "Agent"
+}
+```
+
+**3. Register a Customer**
+`POST /auth/register`
+```json
+{
+    "name": "Mike Customer",
+    "email": "mike_customer@test.com",
+    "password": "password",
+    "password_confirmation": "password",
+    "role": "Customer"
+}
+```
+
+---
+
+### Phase 2: Quote Generation (Agent Action)
+
+**4. Login as Agent**
+`POST /auth/login`
+```json
+{
+    "email": "agent_sarah@test.com",
+    "password": "password"
+}
+```
+
+**5. Create a Quote (Draft)**
+`POST /quotes`
+```json
+{
+    "customer_name": "Mike Customer",
+    "customer_user_id": 3, 
+    "insurance_type": "health",
+    "premium_amount": 1200.00
+}
+```
+
+**6. Submit Quote (Change status to Submitted)**
+`PUT /quotes/{id}`
+```json
+{
+    "customer_name": "Mike Customer",
+    "customer_user_id": 3,
+    "insurance_type": "health",
+    "premium_amount": 1200.00,
+    "status": "submitted"
+}
+```
+
+---
+
+### Phase 3: Policy Approval (Admin Action)
+
+**7. Approve Quote**
+`PUT /quotes/{id}` (Use Admin Token)
+```json
+{
+    "customer_name": "Mike Customer",
+    "customer_user_id": 3,
+    "insurance_type": "health",
+    "premium_amount": 1200.00,
+    "status": "approved"
+}
+```
+
+---
+
+### Phase 4: Filing a Claim (Customer Action)
+
+**8. Login as Customer**
+`POST /auth/login`
+```json
+{
+    "email": "mike_customer@test.com",
+    "password": "password"
+}
+```
+
+**9. View My Quotes**
+`GET /quotes` -> (No body required)
+
+**10. Create a Claim**
+`POST /claims`
+```json
+{
+    "quote_id": 1,
+    "claim_amount": 450.00,
+    "description": "Hospitalization expenses for surgery."
+}
+```
+
+---
+
+### Phase 5: Claim Settlement (Agent/Admin Action)
+
+**11. View All Claims**
+`GET /claims` -> (No body required)
+
+**12. Update Claim Status**
+`PATCH /claims/{id}/status`
+```json
+{
+    "status": "approved"
+}
+```
+
+---
+
+### Phase 6: Audit & Profile (General)
+
+**13. View Activity Logs**
+`GET /activity-logs` -> (No body required, Admin only)
+
+**14. Get My Profile**
+`GET /auth/profile` -> (No body required)
+
+**15. Logout**
+`POST /auth/logout` -> (No body required)
+
+---
+
+### Important Notes:
+- **IDs**: Replace `{id}` in the URLs with the actual IDs returned by the system (usually starting from 1).
+- **Roles**: Make sure you use the correct **Bearer Token** generated for each specific role at each phase.
+- **Quote Status**: You cannot create a Claim (Step 10) until the Quote has been Approved (Step 7).
