@@ -6,6 +6,7 @@ Follow these steps to deploy the Insurance API POC locally.
 - PHP 8.2 or higher
 - Composer
 - MySql or PostgreSQL
+- Redis Server (for caching and background queues)
 - Postman (for API testing)
 
 ## Installation Guide
@@ -51,7 +52,22 @@ Since claim documents are uploaded using the `public` disk, you must create a sy
 php artisan storage:link
 ```
 
-**7. Start the Development Server**
+**7. Configure Caching and Queues**
+Ensure Redis is running locally and configure the cache and queue connections in your `.env` file:
+```env
+CACHE_STORE=redis
+QUEUE_CONNECTION=database
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+```
+
+**8. Start the Queue Worker**
+To process background email notifications for quotes and claims, run the queue worker:
+```bash
+php artisan queue:work
+```
+
+**9. Start the Development Server**
 ```bash
 php artisan serve
 ```

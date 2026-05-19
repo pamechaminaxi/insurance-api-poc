@@ -95,3 +95,18 @@ In case of an error:
 **GET /activity-logs**
 - **Access:** Admin Only
 - **Description:** Retrieves an audit trail of system events including Logins, Data Creations, and Status Updates.
+
+---
+
+## 5. Performance & Caching (Redis)
+To ensure optimal performance and minimize database query load, the following endpoints are cached using **Redis**:
+- **GET /quotes**: Cached for 10 minutes (TTL: 600s). The cache keys are user-specific and automatically flushed/invalidated upon Quote creation (`POST`), update (`PUT`), or deletion (`DELETE`).
+- **GET /claims**: Cached for 10 minutes (TTL: 600s). The cache keys are user-specific and automatically flushed/invalidated upon Claim creation (`POST`) or status/update modifications (`PATCH`/`PUT`).
+
+---
+
+## 6. Asynchronous Queue Processing
+All transactional email notifications are dispatched asynchronously to a background queue to ensure minimal API response latency:
+- **Quote Created/Approved**: Dispatched via `SendQuoteNotificationJob` to the queue worker.
+- **Claim Status Changed**: Dispatched via `SendClaimStatusNotificationJob` to the queue worker.
+

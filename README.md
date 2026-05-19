@@ -9,12 +9,15 @@ A secure, scalable REST API built with Laravel for managing insurance quotes, cl
 - **Quote Management:** Full CRUD capabilities with state management, pagination, and filtering.
 - **Claim Management:** End-to-end claim lifecycle management tied to approved quotes, with automated financial validations.
 - **Document Uploads:** Secure storage and validation for claim evidence (JPG, PNG, PDF up to 10MB).
+- **Redis Caching:** High-performance caching for Quote and Claim listings to minimize database query latency.
+- **Asynchronous Mail Queues:** Offloaded email notifications (Quote creation/approval, Claim updates) via Laravel background jobs to keep response times fast.
 - **Activity Logging:** Automated auditing of model changes (Created/Updated) and authentication events.
 - **Security:** Standardized JSON responses, FormRequest validations, and strict route protections.
 
 ## Core Architecture
 - **Controllers:** Handle HTTP request ingestion and response formatting (`ApiResponse`).
 - **Services:** Encapsulate core business logic (`QuoteService`, `ClaimService`, `DocumentService`).
+- **Jobs:** Process asynchronous background tasks (`SendQuoteNotificationJob`, `SendClaimStatusNotificationJob`).
 - **Traits:** Reusable logic such as `LogsActivity` for automatic event tracking.
 - **FormRequests:** Dedicated validation rules to ensure data integrity before reaching controllers.
 

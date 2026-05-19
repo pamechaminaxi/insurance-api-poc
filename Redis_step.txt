@@ -1,0 +1,65 @@
+STEP 1 - Install Redis in System
+
+Run:
+sudo apt update
+sudo apt install redis-server
+
+Start Redis:
+sudo service redis-server start
+
+Check working:
+redis-cli ping
+
+Output:
+PONG
+
+----------- For Terminal ------------
+After step 1 -> redis-cli
+
+STEP 2 - Create Laravel Project
+
+composer create-project laravel/laravel redisProject
+cd redisProject
+php artisan serve
+
+STEP 3 - Install Redis in Laravel
+
+Install PHP Redis Extension:
+sudo apt install php-redis
+
+Restart Apache / PHP:
+sudo service apache2 restart
+
+Install Redis Client (Predis):
+composer require predis/predis
+
+STEP 4 — Configure Redis in Laravel
+
+Open .env
+
+Replace/add:
+
+CACHE_DRIVER=redis
+SESSION_DRIVER=redis
+QUEUE_CONNECTION=redis
+
+REDIS_CLIENT=phpredis
+REDIS_HOST=127.0.0.1
+REDIS_PASSWORD=null
+REDIS_PORT=6379
+
+Clear config cache:
+
+php artisan config:clear
+-------------------------------------------------
+
+1. php artisan config:clear
+2. redis-cli -n 1
+3. 127.0.0.1:6379[1]> KEYS "*quotes*"  -> (empty array)
+4.Postman call -> GET http://127.0.0.1:8000/api/quotes 
+5. 127.0.0.1:6379[1]> KEYS "*quotes*"  -> (redis)
+	1) "laravel-database-laravel-cache-4fd3948890abd160a31f52aff082926c6b4f6f81:quotes_user_3_d751713988987e9331980363e24189ce"
+	2) "laravel-database-laravel-cache-tag:quotes:entries"
+6.Postman call -> POST http://127.0.0.1:8000/api/quotes 
+7. 127.0.0.1:6379[1]> KEYS "*quotes*"  -> (empty array)
+8.127.0.0.1:6379[1]> KEYS "*claims*" (same as quotes)
