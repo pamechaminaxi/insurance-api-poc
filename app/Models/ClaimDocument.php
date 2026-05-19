@@ -9,8 +9,10 @@ use App\Traits\LogsActivity;
 
 class ClaimDocument extends Model
 {
+    // boot logs activity method
     use HasFactory, LogsActivity;
 
+    // fillable properties
     protected $fillable = [
         'claim_id',
         'file_name',
@@ -19,6 +21,7 @@ class ClaimDocument extends Model
         'file_size',
     ];
 
+    // claim relationship
     public function claim()
     {
         return $this->belongsTo(Claim::class);

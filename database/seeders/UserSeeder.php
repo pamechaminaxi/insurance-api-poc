@@ -25,18 +25,18 @@ class UserSeeder extends Seeder
             'role_id' => $adminRole->id,
         ]);
 
-        User::create([
-            'name' => 'Agent User',
-            'email' => 'agent@insurance.com',
-            'password' => Hash::make('password'),
-            'role_id' => $agentRole->id,
-        ]);
+        // User::create([
+        //     'name' => 'Agent User',
+        //     'email' => 'agent@insurance.com',
+        //     'password' => Hash::make('password'),
+        //     'role_id' => $agentRole->id,
+        // ]);
 
-        User::create([
-            'name' => 'Customer User',
-            'email' => 'customer@insurance.com',
-            'password' => Hash::make('password'),
-            'role_id' => $customerRole->id,
-        ]);
+        // User::create([
+        //     'name' => 'Customer User',
+        //     'email' => 'customer@insurance.com',
+        //     'password' => Hash::make('password'),
+        //     'role_id' => $customerRole->id,
+        // ]);
     }
 }

@@ -21,7 +21,7 @@ Route::prefix('auth')->middleware('throttle:api')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         // Admin Only: Register new users
         Route::post('register', [AuthController::class, 'register'])->middleware('role:Admin');
-        
+
         // Any logged-in user
         Route::post('logout', [AuthController::class, 'logout']);
         Route::get('profile', [AuthController::class, 'profile']);
@@ -56,3 +56,4 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     // Activity Logs (Admin Only)
     Route::get('activity-logs', [ActivityLogController::class, 'index'])->middleware('role:Admin');
 });
+

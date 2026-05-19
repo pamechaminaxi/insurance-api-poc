@@ -15,14 +15,20 @@ class ClaimController extends Controller
     protected $claimService;
     protected $documentService;
 
+    //constructor for claim service and document service
     public function __construct(ClaimService $claimService, DocumentService $documentService)
     {
         $this->claimService = $claimService;
         $this->documentService = $documentService;
     }
 
+    //list all claims using service and paginate logs
     public function index(Request $request)
     {
+        //validate request using form requests
+        $request->validate([
+            'per_page' => 'nullable|integer|min:1|max:100',
+        ]);
         try {
             $claims = $this->claimService->getAllClaims($request->all());
             return ApiResponse::success('Claims fetched successfully', $claims);
@@ -31,6 +37,7 @@ class ClaimController extends Controller
         }
     }
 
+    //create claim using service and validate request using form requests
     public function store(StoreClaimRequest $request)
     {
         try {
@@ -46,6 +53,7 @@ class ClaimController extends Controller
         }
     }
 
+    //show claim using service 
     public function show($id)
     {
         try {
@@ -56,6 +64,7 @@ class ClaimController extends Controller
         }
     }
 
+    //update claim status using service and validate request using form requests 
     public function updateStatus(Request $request, $id)
     {
         try {
@@ -70,6 +79,7 @@ class ClaimController extends Controller
         }
     }
 
+    //update claim using service and validate request using form requests 
     public function update(UpdateClaimRequest $request, $id)
     {
         try {

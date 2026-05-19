@@ -15,8 +15,6 @@ return new class extends Migration
             $table->id();
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->string('action');
-            $table->string('model_type')->nullable();
-            $table->unsignedBigInteger('model_id')->nullable();
             $table->json('old_value')->nullable();
             $table->json('new_value')->nullable();
             $table->timestamps();

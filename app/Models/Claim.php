@@ -8,8 +8,10 @@ use App\Traits\LogsActivity;
 
 class Claim extends Model
 {
+    //boot logs activity method
     use HasFactory, LogsActivity;
 
+    // fillable properties
     protected $fillable = [
         'claim_number',
         'quote_id',
@@ -19,16 +21,19 @@ class Claim extends Model
         'status',
     ];
 
+    // quote relationship
     public function quote()
     {
         return $this->belongsTo(Quote::class);
     }
 
+    // user relationship
     public function user()
     {
         return $this->belongsTo(User::class);
     }
 
+    // claim documents relationship
     public function documents()
     {
         return $this->hasMany(ClaimDocument::class);

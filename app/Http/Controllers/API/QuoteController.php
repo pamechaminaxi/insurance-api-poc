@@ -13,11 +13,13 @@ class QuoteController extends Controller
 {
     protected $quoteService;
 
+    //constructor for quote service 
     public function __construct(QuoteService $quoteService)
     {
         $this->quoteService = $quoteService;
     }
 
+    //list all quotes using service and paginate logs 
     public function index(Request $request)
     {
         try {
@@ -28,6 +30,7 @@ class QuoteController extends Controller
         }
     }
 
+    //create quote using service and validate request using form requests 
     public function store(StoreQuoteRequest $request)
     {
         try {
@@ -38,6 +41,7 @@ class QuoteController extends Controller
         }
     }
     
+    //show quote using service 
     public function show($id)
     {
         try {
@@ -48,6 +52,7 @@ class QuoteController extends Controller
         }
     }
 
+    //update quote using service and validate request using form requests 
     public function update(StoreQuoteRequest $request, $id)
     {
         try {
@@ -58,6 +63,7 @@ class QuoteController extends Controller
         }
     }
 
+    //delete quote using service 
     public function destroy($id)
     {
         try {

@@ -17,11 +17,13 @@ class AuthController extends Controller
 {
     protected $authService;
 
+    // Inject dependencies through constructor method for better testability and maintainability. 
     public function __construct(AuthService $authService)
     {
         $this->authService = $authService;
     }
 
+    //register user method with validation [RegisterRequest] using service
     public function register(RegisterRequest $request)
     {
 
@@ -33,12 +35,13 @@ class AuthController extends Controller
         }
     }
 
+    //login method with validation [LoginRequest] using service and login user
     public function login(LoginRequest $request)
     {
         try {
             $data = $this->authService->login($request);
-            
-            ActivityLog::log('Login', auth()->user());
+
+            ActivityLog::log("User logged in successfully (ID: " . auth()->id() . ", Email: " . auth()->user()->email . ")");
 
             return ApiResponse::success('Login successful', $data);
         } catch (Exception $e) {
@@ -46,6 +49,7 @@ class AuthController extends Controller
         }
     }
 
+    //logout method using service
     public function logout()
     {
         try {
@@ -56,6 +60,7 @@ class AuthController extends Controller
         }
     }
 
+    //get user profile method using service
     public function profile()
     {
         try {
@@ -65,6 +70,7 @@ class AuthController extends Controller
         }
     }
 
+    //forgot password method with validation [ForgotPasswordRequest] using service and return reset token
     public function forgotPassword(ForgotPasswordRequest $request)
     {
         try {
@@ -77,6 +83,7 @@ class AuthController extends Controller
         }
     }
 
+    //reset password method with validation [ResetPasswordRequest] using service and reset password
     public function resetPassword(ResetPasswordRequest $request)
     {
         try {

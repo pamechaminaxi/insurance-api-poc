@@ -7,6 +7,7 @@ use Illuminate\Support\Str;
 
 class QuoteService
 {
+    // get all quotes 
     public function getAllQuotes($filters = [])
     {
         $query = Quote::query();
@@ -17,10 +18,12 @@ class QuoteService
             $query->where('customer_user_id', $user->id);
         }
 
+        //filter by status 
         if (isset($filters['status'])) {
             $query->where('status', $filters['status']);
         }
 
+        //search by quote number or customer name 
         if (isset($filters['search'])) {
             $query->where(function($q) use ($filters) {
                 $q->where('quote_number', 'like', '%' . $filters['search'] . '%')
@@ -31,6 +34,7 @@ class QuoteService
         return $query->with(['customer', 'creator'])->paginate($filters['per_page'] ?? 15);
     }
 
+    // create quote
     public function createQuote($data)
     {
         $data['quote_number'] = 'QT-' . strtoupper(Str::random(8));
@@ -40,6 +44,7 @@ class QuoteService
         return Quote::create($data);
     }
 
+    // get quote by id
     public function getQuoteById($id)
     {
         $quote = Quote::with(['customer', 'creator', 'claims'])->findOrFail($id);
@@ -52,6 +57,7 @@ class QuoteService
         return $quote;
     }
 
+    // update quote
     public function updateQuote($id, $data)
     {
         $quote = Quote::findOrFail($id);
@@ -65,6 +71,7 @@ class QuoteService
         return $quote;
     }
 
+    // delete quote
     public function deleteQuote($id)
     {
         $quote = Quote::findOrFail($id);

@@ -12,6 +12,7 @@ use Carbon\Carbon;
 
 class AuthService
 {
+    // register user method
     public function register($request)
     {
         $role = Role::where('name', $request->role)->firstOrFail();
@@ -31,6 +32,7 @@ class AuthService
         ];
     }
 
+    // login user method
     public function login($request)
     {
         if (!Auth::attempt($request->only('email','password'))) {
@@ -46,11 +48,13 @@ class AuthService
         ];
     }
 
+    // logout user method
     public function logout($user)
     {
         $user->tokens()->delete();
     }
 
+    // forgot password method
     public function forgotPassword($request)
     {
         // generate token
@@ -72,6 +76,7 @@ class AuthService
         ];
     }
 
+    // reset password method
     public function resetPassword($request)
     {
         $record = PasswordReset::where('email', $request->email)

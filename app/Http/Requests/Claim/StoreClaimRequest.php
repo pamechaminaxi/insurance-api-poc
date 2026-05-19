@@ -17,7 +17,7 @@ class StoreClaimRequest extends FormRequest
             'quote_id' => 'required|exists:quotes,id',
             'claim_amount' => 'required|numeric|min:0',
             'description' => 'required|string',
-            'documents' => 'nullable|array',
+            'documents' => 'required|array',
             'documents.*' => 'file|mimes:jpg,png,pdf|max:10240', // 10MB limit
         ];
     }
