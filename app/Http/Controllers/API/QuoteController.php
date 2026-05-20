@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Services\QuoteService;
 use App\Http\Requests\Quote\StoreQuoteRequest;
+use App\Http\Requests\Quote\UpdateQuoteRequest;
 use App\Helpers\ApiResponse;
 use Illuminate\Http\Request;
 use Exception;
@@ -53,7 +54,7 @@ class QuoteController extends Controller
     }
 
     //update quote using service and validate request using form requests 
-    public function update(StoreQuoteRequest $request, $id)
+    public function update(UpdateQuoteRequest $request, $id)
     {
         try {
             $quote = $this->quoteService->updateQuote($id, $request->validated());

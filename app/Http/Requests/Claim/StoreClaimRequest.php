@@ -18,7 +18,7 @@ class StoreClaimRequest extends FormRequest
             'claim_amount' => 'required|numeric|min:0',
             'description' => 'required|string',
             'documents' => 'required|array',
-            'documents.*' => 'file|mimes:jpg,png,pdf|max:10240', // 10MB limit
+            'documents.*' => 'file|extensions:jpg,jpeg,png,pdf|max:10240', // 10MB limit
         ];
     }
 }

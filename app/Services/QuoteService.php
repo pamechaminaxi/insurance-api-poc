@@ -149,9 +149,9 @@ class QuoteService
     {
         $quote = Quote::findOrFail($id);
 
-        if ($quote->status !== 'draft' && auth()->user()->role->name !== 'Admin') {
-            throw new \Exception('Only draft quotes can be deleted by Agents.', 403);
-        }
+        // if ($quote->status !== 'draft' && auth()->user()->role->name !== 'Admin') {
+        //     throw new \Exception('Only draft quotes can be deleted by Agents.', 403);
+        // }
 
         $result = $quote->delete();
 

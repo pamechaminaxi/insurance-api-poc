@@ -61,4 +61,5 @@ return Application::configure(basePath: dirname(__DIR__))
                 return \App\Helpers\ApiResponse::error($message, $statusCode);
             }
         });
+
     })->create();
