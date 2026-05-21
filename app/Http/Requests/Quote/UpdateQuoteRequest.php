@@ -25,8 +25,8 @@ class UpdateQuoteRequest extends FormRequest
         return [
             'customer_name' => 'sometimes|string|max:255',
             'insurance_type' => 'sometimes|in:health,life,motor',
-            'premium_amount' => 'sometimes|numeric|min:0',
-            'coverage_amount' => 'sometimes|numeric|min:0',
+            'premium_amount' => 'sometimes|numeric|min:1',
+            'coverage_amount' => 'sometimes|numeric|min:1',
             'status' => 'sometimes|in:draft,submitted,approved,rejected',
             'customer_user_id' => [
                 'sometimes',
