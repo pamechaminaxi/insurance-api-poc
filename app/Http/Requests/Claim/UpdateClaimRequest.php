@@ -14,7 +14,7 @@ class UpdateClaimRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'claim_amount' => 'sometimes|numeric|min:0',
+            'claim_amount' => 'sometimes|numeric|min:1',
             'description' => 'sometimes|string',
             'status' => 'sometimes|string|in:Pending,Under Review,Approved,Rejected,Settled',
         ];
