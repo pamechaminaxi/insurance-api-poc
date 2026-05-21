@@ -267,4 +267,88 @@ class QuoteValidationTest extends TestCase
         $this->assertNotNull($claim);
         $this->assertEquals('Pending', $claim->fresh()->status);
     }
+
+    public function test_cannot_create_claim_for_expired_quote()
+    {
+        $this->actingAs($this->admin);
+
+        // Create an approved quote
+        $quote = $this->quoteService->createQuote([
+            'customer_name' => 'Customer User',
+            'customer_user_id' => $this->customer->id,
+            'insurance_type' => 'motor',
+            'premium_amount' => 500.00,
+            'coverage_amount' => 10000.00,
+        ]);
+        $quote = $this->quoteService->updateQuote($quote->id, ['status' => 'submitted']);
+        $quote = $this->quoteService->updateQuote($quote->id, ['status' => 'approved']);
+
+        // Force set created_at to 1 year and 1 day ago
+        $quote->created_at = now()->subYear()->subDay();
+        $quote->save();
+
+        // Try to create claim for this expired quote
+        $this->actingAs($this->customer);
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('A claim cannot be created for an expired quote.');
+
+        $this->claimService->createClaim([
+            'quote_id' => $quote->id,
+            'claim_amount' => 2000.00,
+            'description' => 'Test Claim',
+        ]);
+    }
+
+    public function test_cannot_update_expired_quote()
+    {
+        $this->actingAs($this->admin);
+
+        // Create a draft quote
+        $quote = $this->quoteService->createQuote([
+            'customer_name' => 'Customer User',
+            'customer_user_id' => $this->customer->id,
+            'insurance_type' => 'motor',
+            'premium_amount' => 500.00,
+            'coverage_amount' => 10000.00,
+        ]);
+
+        // Force set created_at to 1 year and 1 day ago
+        $quote->created_at = now()->subYear()->subDay();
+        $quote->save();
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('This quote has expired.');
+
+        $this->quoteService->updateQuote($quote->id, ['status' => 'submitted']);
+    }
+
+    public function test_can_recreate_quote_if_previous_quote_is_expired()
+    {
+        $this->actingAs($this->agent);
+
+        // Create initial quote
+        $quote = $this->quoteService->createQuote([
+            'customer_name' => 'Customer User',
+            'customer_user_id' => $this->customer->id,
+            'insurance_type' => 'motor',
+            'premium_amount' => 500.00,
+            'coverage_amount' => 10000.00,
+        ]);
+
+        // Force set created_at to 1 year and 1 day ago
+        $quote->created_at = now()->subYear()->subDay();
+        $quote->save();
+
+        // Should be able to create a new quote with same customer and insurance type
+        $newQuote = $this->quoteService->createQuote([
+            'customer_name' => 'Customer User',
+            'customer_user_id' => $this->customer->id,
+            'insurance_type' => 'motor',
+            'premium_amount' => 600.00,
+            'coverage_amount' => 12000.00,
+        ]);
+
+        $this->assertNotNull($newQuote);
+        $this->assertNotEquals($quote->id, $newQuote->id);
+    }
 }

@@ -50,6 +50,8 @@ class ClaimService
     // create claim (busts claims cache)
     public function createClaim($data)
     {
+        Quote::syncExpiredQuotes();
+
         // Business Rule: Claim can be created ONLY IF quote.status = APPROVED and is_delete = 0
         $quote = Quote::withTrashed()->findOrFail($data['quote_id']);
 
@@ -61,6 +63,11 @@ class ClaimService
         //check if quote is approved
         if ($quote->status !== 'approved') {
             throw new \Exception('A claim can only be created for an APPROVED quote.', 400);
+        }
+
+        // check if quote has expired (valid up to 1 year from created_at)
+        if ($quote->is_expired) {
+            throw new \Exception('A claim cannot be created for an expired quote.', 400);
         }
 
         //check if total claim amount exceeds the policy coverage limit

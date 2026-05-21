@@ -63,3 +63,8 @@ php artisan config:clear
 6.Postman call -> POST http://127.0.0.1:8000/api/quotes 
 7. 127.0.0.1:6379[1]> KEYS "*quotes*"  -> (empty array)
 8.127.0.0.1:6379[1]> KEYS "*claims*" (same as quotes)
+
+
+
+-------------------------------------------------
+php artisan tinker --execute="\$q = \App\Models\Quote::find(2); \$q->created_at = now()->subMonths(13); \$q->save();"

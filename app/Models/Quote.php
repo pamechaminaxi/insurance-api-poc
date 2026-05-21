@@ -24,7 +24,33 @@ class Quote extends Model
         'customer_user_id',
         'created_by',
         'is_delete',
+        'is_expired',
     ];
+
+    protected $casts = [
+        'is_expired' => 'boolean',
+    ];
+
+    /**
+     * Determine if the quote is expired (valid up to 1 year from created_at).
+     */
+    public function getIsExpiredAttribute($value): bool
+    {
+        if ($value) {
+            return true;
+        }
+        return $this->created_at && $this->created_at->addYear()->isPast();
+    }
+
+    /**
+     * Sync and update all expired quotes in the database.
+     */
+    public static function syncExpiredQuotes()
+    {
+        self::where('is_expired', false)
+            ->where('created_at', '<', now()->subYear())
+            ->update(['is_expired' => true]);
+    }
 
     /**
      * Override runSoftDelete to also update the is_delete column.
@@ -93,3 +119,4 @@ class Quote extends Model
         return $this->hasMany(Claim::class);
     }
 }
+

@@ -26,6 +26,8 @@ class QuoteService
     // get all quotes (Redis cached)
     public function getAllQuotes($filters = [])
     {
+        Quote::syncExpiredQuotes();
+
         $cacheKey = $this->buildQuoteCacheKey($filters);
 
         return Cache::tags(['quotes'])->remember($cacheKey, self::CACHE_TTL, function () use ($filters) {
@@ -57,9 +59,12 @@ class QuoteService
     // create quote (busts quotes cache + dispatches quote-created email job)
     public function createQuote($data)
     {
+        Quote::syncExpiredQuotes();
+
         // Check if there is already an active quote for the same customer and insurance type in any status
         $existingQuote = Quote::where('customer_user_id', $data['customer_user_id'])
             ->where('insurance_type', $data['insurance_type'])
+            ->where('is_expired', false)
             ->first();
 
         if ($existingQuote) {
@@ -103,8 +108,15 @@ class QuoteService
     // update quote (busts quotes cache + dispatches approved email job)
     public function updateQuote($id, $data)
     {
+        Quote::syncExpiredQuotes();
+
         $quote = Quote::findOrFail($id);
         $previousStatus = $quote->status;
+
+        // Check if quote has expired (valid up to 1 year from created_at)
+        if ($quote->is_expired) {
+            throw new \Exception('This quote has expired.', 422);
+        }
 
         // Business Rule: Agent can only edit if status is 'draft'
         if ($quote->status !== 'draft' && auth()->user()->role->name === 'Agent') {

@@ -17,8 +17,8 @@ class StoreQuoteRequest extends FormRequest
         return [
             'customer_name' => 'required|string|max:255',
             'insurance_type' => 'required|in:health,life,motor',
-            'premium_amount' => 'required|numeric|min:0',
-            'coverage_amount' => 'required|numeric|min:0',
+            'premium_amount' => 'required|numeric|min:1',
+            'coverage_amount' => 'required|numeric|min:1',
             'status' => 'sometimes|in:draft,submitted,approved,rejected',
             'customer_user_id' => [
                 'required',
