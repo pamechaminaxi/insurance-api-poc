@@ -54,6 +54,14 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         });
 
+        $exceptions->render(function (\Illuminate\Http\Exceptions\PostTooLargeException $e, $request) {
+            if ($request->is('api/*')) {
+                $maxSize = ini_get('post_max_size');
+                $maxSizeFriendly = str_ireplace(['M', 'G', 'K'], ['MB', 'GB', 'KB'], $maxSize);
+                return \App\Helpers\ApiResponse::error("The uploaded file(s) exceed the maximum allowed size of {$maxSizeFriendly}.", 413);
+            }
+        });
+
         $exceptions->render(function (\Throwable $e, $request) {
             if ($request->is('api/*')) {
                 $statusCode = method_exists($e, 'getStatusCode') ? $e->getStatusCode() : 500;
@@ -61,5 +69,6 @@ return Application::configure(basePath: dirname(__DIR__))
                 return \App\Helpers\ApiResponse::error($message, $statusCode);
             }
         });
+
 
     })->create();

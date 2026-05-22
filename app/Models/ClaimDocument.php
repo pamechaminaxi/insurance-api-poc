@@ -21,6 +21,22 @@ class ClaimDocument extends Model
         'file_size',
     ];
 
+    // hide internal storage path from API responses
+    protected $hidden = [
+        'file_path',
+    ];
+
+    // append custom attribute in response
+    protected $appends = [
+        'file_url',
+    ];
+
+    // accessor to get the public URL of the file
+    public function getFileUrlAttribute()
+    {
+        return asset('storage/' . $this->file_path);
+    }
+
     // claim relationship
     public function claim()
     {

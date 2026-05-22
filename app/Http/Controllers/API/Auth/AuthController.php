@@ -41,7 +41,7 @@ class AuthController extends Controller
         try {
             $data = $this->authService->login($request);
 
-            ActivityLog::log("User logged in successfully (ID: " . auth()->id() . ", Email: " . auth()->user()->email . ")");
+            ActivityLog::log("User logged in successfully (Email: " . auth()->user()->email . ")");
 
             return ApiResponse::success('Login successful', $data);
         } catch (Exception $e) {

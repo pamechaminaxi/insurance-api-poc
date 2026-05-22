@@ -18,11 +18,33 @@ trait LogsActivity
             // check model class and log activity
             if ($modelClass === \App\Models\Quote::class) {
                 $action = "Quote {$model->quote_number} was created for customer '{$model->customer_name}'.";
-                self::logActivity($action, null, $model->toArray());
+
+                // Convert model to array
+                $newValue = $model->toArray();
+
+                // Remove sensitive/internal fields
+                unset(
+                    $newValue['id'],
+                    $newValue['customer_user_id'],
+                    $newValue['created_by']
+                );
+
+                self::logActivity($action, null, $newValue);
+
             } elseif ($modelClass === \App\Models\ClaimDocument::class) {
+                $model->load('claim');
                 $claimNumber = $model->claim ? $model->claim->claim_number : "ID: {$model->claim_id}";
                 $action = "Claim document '{$model->file_name}' was uploaded for Claim {$claimNumber}.";
-                self::logActivity($action, null, $model->toArray());
+
+                // Build new_value with claim relation data (excluding id and foreign keys from claim)
+                $newValue = $model->toArray();
+                unset($newValue['claim_id']);
+                unset($newValue['id']);
+                if (isset($newValue['claim'])) {
+                    unset($newValue['claim']['id'], $newValue['claim']['quote_id'], $newValue['claim']['user_id']);
+                }
+
+                self::logActivity($action, null, $newValue);
             }
         });
 
@@ -44,12 +66,13 @@ trait LogsActivity
     // log activity method 
     protected static function logActivity($action, $oldValue, $newValue)
     {
-        // fallback to user 1 if not logged in (e.g. during seeding)
+        // fallback to first user if not logged in (e.g. during seeding or test setup)
         ActivityLog::create([
-            'user_id' => Auth::id() ?? 1, 
+            'user_id' => Auth::id() ?? (\App\Models\User::first()->id ?? 1), 
             'action' => $action,
             'old_value' => $oldValue,
             'new_value' => $newValue,
         ]);
+
     }
 }

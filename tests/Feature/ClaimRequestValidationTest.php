@@ -39,7 +39,7 @@ class ClaimRequestValidationTest extends TestCase
         ]);
 
         // Create an approved quote
-        $this->quote = Quote::create([
+        $this->quote = Quote::forceCreate([
             'quote_number' => 'QT-TEST1234',
             'created_by' => $admin->id,
             'customer_name' => 'Customer User',
@@ -67,4 +67,34 @@ class ClaimRequestValidationTest extends TestCase
 
         $response->assertStatus(201);
     }
+
+    public function test_claim_request_fails_with_proper_message_when_post_data_too_large()
+    {
+        $this->actingAs($this->customer);
+
+        // Create a 15MB file (15000 KB) which exceeds post_max_size (10M)
+        $file = UploadedFile::fake()->create('large_document.pdf', 15000);
+
+        $response = $this->call(
+            'POST',
+            '/api/claims',
+            [
+                'quote_id' => $this->quote->id,
+                'claim_amount' => 2000.00,
+                'description' => 'Test Claim',
+            ],
+            [], // cookies
+            ['documents' => [$file]], // files
+            ['CONTENT_LENGTH' => 16000000] // server parameters
+        );
+
+        $response->assertStatus(413);
+        $response->assertJson([
+            'success' => false,
+            'message' => 'The uploaded file(s) exceed the maximum allowed size of 10MB.',
+            'errors' => null,
+        ]);
+    }
 }
+
+

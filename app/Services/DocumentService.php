@@ -4,37 +4,72 @@ namespace App\Services;
 
 use App\Models\ClaimDocument;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 
 class DocumentService
 {
-    // upload documents for a claim
+    // upload documents for a claim with DB transaction and file rollback
     public function uploadDocuments($claimId, $files)
     {
-        $uploadedDocs = [];
+        $storedFiles = [];
 
-        // loop through files and upload
-        foreach ($files as $file) {
-            $fileName = $file->getClientOriginalName();
-            $path = $file->store('claims', 'public');
+        try {
+            //DB Transaction for atomicity (all or nothing)
+            $uploadedDocs = DB::transaction(function () use ($claimId, $files, &$storedFiles) {
 
-            //create document record
-            $uploadedDocs[] = ClaimDocument::create([
-                'claim_id' => $claimId,
-                'file_name' => $fileName,
-                'file_path' => $path,
-                'file_type' => $file->getClientOriginalExtension(),
-                'file_size' => $file->getSize(),
-            ]);
+                $uploadedDocs = [];
+
+                // loop through files and upload
+                foreach ($files as $file) {
+
+                    // store file
+                    $path = $file->store('claims', 'public');
+
+                    // track stored files
+                    $storedFiles[] = $path;
+
+                    // create DB record
+                    $uploadedDocs[] = ClaimDocument::create([
+                        'claim_id' => $claimId,
+                        'file_name' => $file->getClientOriginalName(),
+                        'file_path' => $path,
+                        'file_type' => $file->getClientOriginalExtension(),
+                        'file_size' => $file->getSize(),
+                    ]);
+                }
+
+                return $uploadedDocs;
+            });
+
+            return $uploadedDocs;
+
+        } catch (\Exception $e) {
+
+            // delete uploaded files if DB fails
+            foreach ($storedFiles as $path) {
+                // check if file exists before deleting
+                if (Storage::disk('public')->exists($path)) {
+                    Storage::disk('public')->delete($path);
+                }
+            }
+
+            throw $e;
         }
-
-        return $uploadedDocs;
     }
 
     // delete document
     public function deleteDocument($id)
     {
-        $doc = ClaimDocument::findOrFail($id);
-        Storage::disk('public')->delete($doc->file_path);
-        return $doc->delete();
+        return DB::transaction(function () use ($id) {
+            $doc = ClaimDocument::findOrFail($id);
+
+            // delete physical file
+            if (Storage::disk('public')->exists($doc->file_path)) {
+                Storage::disk('public')->delete($doc->file_path);
+            }
+
+            // delete db record
+            return $doc->delete();
+        });
     }
 }

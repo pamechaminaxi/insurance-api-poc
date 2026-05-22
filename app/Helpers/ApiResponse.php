@@ -39,6 +39,19 @@ class ApiResponse
 
         // If the returned data is paginated, attach pagination meta info
         if ($data instanceof \Illuminate\Pagination\LengthAwarePaginator) {
+            if ($data->currentPage() > $data->lastPage() && $data->lastPage() > 0) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Requested page exceeds total available pages.',
+                'data' => [],
+                'meta' => [
+                    'current_page' => $data->currentPage(),
+                    'total' => $data->total(),
+                    'per_page' => $data->perPage(),
+                    'last_page' => $data->lastPage(),
+                ]
+            ], 400);
+        }
             $response['data'] = $data->items(); // Only return actual records
 
             // Pagination metadata

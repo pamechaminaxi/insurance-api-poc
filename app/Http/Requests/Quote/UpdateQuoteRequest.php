@@ -4,6 +4,7 @@ namespace App\Http\Requests\Quote;
 
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use App\Models\User;
 
 class UpdateQuoteRequest extends FormRequest
 {
@@ -23,13 +24,13 @@ class UpdateQuoteRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'customer_name' => 'sometimes|string|max:255',
+            // 'customer_name' => 'sometimes|string|max:255',
             'insurance_type' => 'sometimes|in:health,life,motor',
             'premium_amount' => 'sometimes|numeric|min:1',
             'coverage_amount' => 'sometimes|numeric|min:1',
             'status' => 'sometimes|in:draft,submitted,approved,rejected',
             'customer_user_id' => [
-                'sometimes',
+                'required',
                 'exists:users,id',
                 function ($attribute, $value, $fail) {
                     $user = User::find($value);

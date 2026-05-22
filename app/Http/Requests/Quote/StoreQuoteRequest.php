@@ -15,7 +15,7 @@ class StoreQuoteRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'customer_name' => 'required|string|max:255',
+            //'customer_name' => 'required|string|max:255',
             'insurance_type' => 'required|in:health,life,motor',
             'premium_amount' => 'required|numeric|min:1',
             'coverage_amount' => 'required|numeric|min:1',

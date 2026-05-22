@@ -50,46 +50,46 @@ class ClaimService
     // create claim (busts claims cache)
     public function createClaim($data)
     {
-        Quote::syncExpiredQuotes();
+        return DB::transaction(function () use ($data) {
+            Quote::syncExpiredQuotes();
 
-        // Business Rule: Claim can be created ONLY IF quote.status = APPROVED and is_delete = 0
-        $quote = Quote::withTrashed()->findOrFail($data['quote_id']);
+            // Business Rule: Claim can be created ONLY IF quote.status = APPROVED and is_delete = 0
+            $quote = Quote::withTrashed()->findOrFail($data['quote_id']);
 
-        // check if quote is deleted
-        if ($quote->is_delete == 1 || $quote->trashed()) {
-            throw new \Exception('A claim cannot be created for a deleted quote.', 400);
-        }
+            // check if quote is deleted
+            if ($quote->is_delete == 1 || $quote->trashed()) {
+                throw new \Exception('A claim cannot be created for a deleted quote.', 400);
+            }
 
-        //check if quote is approved
-        if ($quote->status !== 'approved') {
-            throw new \Exception('A claim can only be created for an APPROVED quote.', 400);
-        }
+            //check if quote is approved
+            if ($quote->status !== 'approved') {
+                throw new \Exception('A claim can only be created for an APPROVED quote.', 400);
+            }
 
-        // check if quote has expired (valid up to 1 year from created_at)
-        if ($quote->is_expired) {
-            throw new \Exception('A claim cannot be created for an expired quote.', 400);
-        }
+            // check if quote has expired (valid up to 1 year from created_at)
+            if ($quote->is_expired) {
+                throw new \Exception('A claim cannot be created for an expired quote.', 400);
+            }
 
-        //check if total claim amount exceeds the policy coverage limit
-        $totalClaimed = Claim::where('quote_id', $quote->id)
-            ->whereIn('status', ['Pending', 'Under Review', 'Approved', 'Settled'])
-            ->sum('claim_amount');
+            //check if total claim amount exceeds the policy coverage limit
+            $totalClaimed = Claim::where('quote_id', $quote->id)
+                ->whereIn('status', ['Pending', 'Under Review', 'Approved', 'Settled'])
+                ->sum('claim_amount');
 
-        if (($totalClaimed + $data['claim_amount']) > $quote->coverage_amount) {
-            throw new \Exception('Total claim amount exceeds the policy coverage limit of ' . $quote->coverage_amount, 422);
-        }
+            if (($totalClaimed + $data['claim_amount']) > $quote->coverage_amount) {
+                throw new \Exception('Total claim amount exceeds the policy coverage limit of ' . $quote->coverage_amount, 422);
+            }
 
-        //create claim in transaction
-        $claim = DB::transaction(function () use ($data) {
+            //create claim
             $data['claim_number'] = 'CL-' . strtoupper(Str::random(8));
             $data['user_id'] = auth()->id();
-            return Claim::create($data);
+            $claim = Claim::create($data);
+
+            // Invalidate all cached claim listings so new claim appears immediately
+            Cache::tags(['claims'])->flush();
+
+            return $claim;
         });
-
-        // Invalidate all cached claim listings so new claim appears immediately
-        Cache::tags(['claims'])->flush();
-
-        return $claim;
     }
 
     // get claim by id
@@ -108,45 +108,10 @@ class ClaimService
     // update claim status method (busts claims cache + dispatches email job)
     public function updateClaimStatus($id, $status)
     {
-        $claim = Claim::findOrFail($id);
+        return DB::transaction(function () use ($id, $status) {
+            $claim = Claim::findOrFail($id);
 
-        // Define allowed forward transitions
-        $validTransitions = [
-            'Pending'      => ['Under Review', 'Rejected'],
-            'Under Review' => ['Approved', 'Rejected'],
-            'Approved'     => ['Settled'],
-            'Rejected'     => [], // Terminal state
-            'Settled'      => [], // Terminal state
-        ];
-
-        //check if status is valid
-        $previousStatus = $claim->status;
-
-        if (!in_array($status, $validTransitions[$previousStatus] ?? [])) {
-            throw new \Exception("Invalid status transition from {$previousStatus} to {$status}.", 422);
-        }
-
-        $claim->update(['status' => $status]);
-
-        // Invalidate all cached claim listings so updated status appears immediately
-        Cache::tags(['claims'])->flush();
-
-        // Dispatch background job to email the customer about the status change
-        // API returns 200 OK instantly; email sends asynchronously via queue worker
-        SendClaimStatusNotificationJob::dispatch($claim, $previousStatus, $status);
-
-        return $claim;
-    }
-
-    // update claim method (busts claims cache + dispatches email job if status changed)
-    public function updateClaim($id, $data)
-    {
-        $claim = $this->getClaimById($id);
-        $previousStatus = $claim->status;
-        $statusChanged  = false;
-
-        //update status if changed
-        if (isset($data['status']) && $data['status'] !== $claim->status) {
+            // Define allowed forward transitions
             $validTransitions = [
                 'Pending'      => ['Under Review', 'Rejected'],
                 'Under Review' => ['Approved', 'Rejected'],
@@ -156,39 +121,78 @@ class ClaimService
             ];
 
             //check if status is valid
-            $newStatus = $data['status'];
+            $previousStatus = $claim->status;
 
-            if (!in_array($newStatus, $validTransitions[$previousStatus] ?? [])) {
-                throw new \Exception("Invalid status transition from {$previousStatus} to {$newStatus}.", 422);
+            if (!in_array($status, $validTransitions[$previousStatus] ?? [])) {
+                throw new \Exception("Invalid status transition from {$previousStatus} to {$status}.", 422);
             }
 
-            $statusChanged = true;
-        }
+            $claim->update(['status' => $status]);
 
-        //update claim amount if changed
-        if (isset($data['claim_amount']) && $data['claim_amount'] != $claim->claim_amount) {
-            $totalClaimed = Claim::where('quote_id', $claim->quote_id)
-                ->where('id', '!=', $id) // Exclude current claim
-                ->whereIn('status', ['Pending', 'Under Review', 'Approved', 'Settled'])
-                ->sum('claim_amount');
+            // Invalidate all cached claim listings so updated status appears immediately
+            Cache::tags(['claims'])->flush();
 
-            //check if total claim amount exceeds the policy coverage limit
-            if (($totalClaimed + $data['claim_amount']) > $claim->quote->coverage_amount) {
-                throw new \Exception('Total claim amount exceeds the policy coverage limit of ' . $claim->quote->coverage_amount, 422);
+            // Dispatch background job to email the customer about the status change
+            // API returns 200 OK instantly; email sends asynchronously via queue worker
+            SendClaimStatusNotificationJob::dispatch($claim, $previousStatus, $status);
+
+            return $claim;
+        });
+    }
+
+    // update claim method (busts claims cache + dispatches email job if status changed)
+    public function updateClaim($id, $data)
+    {
+        return DB::transaction(function () use ($id, $data) {
+            $claim = $this->getClaimById($id);
+            $previousStatus = $claim->status;
+            $statusChanged  = false;
+
+            //update status if changed
+            if (isset($data['status']) && $data['status'] !== $claim->status) {
+                $validTransitions = [
+                    'Pending'      => ['Under Review', 'Rejected'],
+                    'Under Review' => ['Approved', 'Rejected'],
+                    'Approved'     => ['Settled'],
+                    'Rejected'     => [], // Terminal state
+                    'Settled'      => [], // Terminal state
+                ];
+
+                //check if status is valid
+                $newStatus = $data['status'];
+
+                if (!in_array($newStatus, $validTransitions[$previousStatus] ?? [])) {
+                    throw new \Exception("Invalid status transition from {$previousStatus} to {$newStatus}.", 422);
+                }
+
+                $statusChanged = true;
             }
-        }
 
-        //update claim
-        $claim->update($data);
+            //update claim amount if changed
+            if (isset($data['claim_amount']) && $data['claim_amount'] != $claim->claim_amount) {
+                $totalClaimed = Claim::where('quote_id', $claim->quote_id)
+                    ->where('id', '!=', $id) // Exclude current claim
+                    ->whereIn('status', ['Pending', 'Under Review', 'Approved', 'Settled'])
+                    ->sum('claim_amount');
 
-        // Invalidate all cached claim listings so updated data appears immediately
-        Cache::tags(['claims'])->flush();
+                //check if total claim amount exceeds the policy coverage limit
+                if (($totalClaimed + $data['claim_amount']) > $claim->quote->coverage_amount) {
+                    throw new \Exception('Total claim amount exceeds the policy coverage limit of ' . $claim->quote->coverage_amount, 422);
+                }
+            }
 
-        // Dispatch email notification if status was changed
-        if ($statusChanged) {
-            SendClaimStatusNotificationJob::dispatch($claim, $previousStatus, $data['status']);
-        }
+            //update claim
+            $claim->update($data);
 
-        return $claim;
+            // Invalidate all cached claim listings so updated data appears immediately
+            Cache::tags(['claims'])->flush();
+
+            // Dispatch email notification if status was changed
+            if ($statusChanged) {
+                SendClaimStatusNotificationJob::dispatch($claim, $previousStatus, $data['status']);
+            }
+
+            return $claim;
+        });
     }
 }

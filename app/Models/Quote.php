@@ -20,7 +20,7 @@ class Quote extends Model
         'premium_amount',
         'coverage_amount',
         'status',
-        'customer_name',
+        // 'customer_name',
         'customer_user_id',
         'created_by',
         'is_delete',
