@@ -10,8 +10,8 @@ use App\Helpers\ApiResponse;
 use Exception;
 use App\Http\Requests\Auth\ForgotPasswordRequest;
 use App\Http\Requests\Auth\ResetPasswordRequest;
+use App\Http\Requests\Auth\UpdateUserStatusRequest;
 use App\Models\ActivityLog;
-
 
 class AuthController extends Controller
 {
@@ -92,6 +92,27 @@ class AuthController extends Controller
             return ApiResponse::success('Password reset successfully');
 
         } catch (\Exception $e) {
+            return ApiResponse::error($e->getMessage());
+        }
+    }
+
+    //update user status method with validation [UpdateUserStatusRequest] using service and update user status
+    public function updateStatus(UpdateUserStatusRequest $request, $id)
+    {
+        try {
+
+            $data = $this->authService->updateUserStatus(
+                $id,
+                $request->is_active
+            );
+
+            return ApiResponse::success(
+                'User status updated successfully',
+                $data
+            );
+
+        } catch (Exception $e) {
+
             return ApiResponse::error($e->getMessage());
         }
     }

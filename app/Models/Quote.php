@@ -22,6 +22,7 @@ class Quote extends Model
         'status',
         // 'customer_name',
         'customer_user_id',
+        'agent_id',
         'created_by',
         'is_delete',
         'is_expired',
@@ -117,6 +118,12 @@ class Quote extends Model
     public function claims()
     {
         return $this->hasMany(Claim::class);
+    }
+
+    // assigned agent relationship
+    public function agent()
+    {
+        return $this->belongsTo(User::class, 'agent_id');
     }
 }
 

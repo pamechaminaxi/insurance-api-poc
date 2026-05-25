@@ -24,7 +24,8 @@ class AuthService
                 'name' => $request->name,
                 'email' => $request->email,
                 'password' => Hash::make($request->password),
-                'role_id' => $role->id
+                'role_id' => $role->id,
+                'is_active' => $request->has('is_active') ? $request->is_active : true
             ]);
 
             //$token = $user->createToken('API Token')->plainTextToken;
@@ -46,6 +47,15 @@ class AuthService
         return DB::transaction(function () {
 
             $user = Auth::user();
+
+            // CHECK USER STATUS
+            if (!$user->is_active) {
+
+                Auth::logout();
+
+                throw new \Exception('Your account is inactive. Please contact admin.');
+            }
+
             $token = $user->createToken('API Token')->plainTextToken;
 
             return [
@@ -116,6 +126,28 @@ class AuthService
             PasswordReset::where('email', $request->email)->delete();
 
             return true;
+        });
+    }
+
+    // update user status method using transaction
+    public function updateUserStatus($id, $status)
+    {
+        return DB::transaction(function () use ($id, $status) {
+
+            // find user by id
+            $user = User::findOrFail($id);
+
+            // update user status
+            $user->update([
+                'is_active' => $status
+            ]);
+
+            // revoke all tokens if inactive
+            if (!$status) {
+                $user->tokens()->delete();
+            }
+
+            return $user;
         });
     }
 }

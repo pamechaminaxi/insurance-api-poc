@@ -18,6 +18,7 @@ class User extends Authenticatable
         'email',
         'password',
         'role_id',
+        'is_active',
     ];
 
     // hidden properties
@@ -36,6 +37,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_active' => 'boolean',
         ];
     }
 

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Jobs\SendClaimStatusNotificationJob;
 use App\Models\Claim;
 use App\Models\Quote;
+use App\Models\User;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -31,61 +32,184 @@ class ClaimService
         $cacheKey = $this->buildClaimCacheKey($filters);
 
         return Cache::tags(['claims'])->remember($cacheKey, self::CACHE_TTL, function () use ($filters) {
-            $query = Claim::query();
+                $query = Claim::query();
 
-            //filter by status
-            if (isset($filters['status'])) {
-                $query->where('status', $filters['status']);
+                // Get authenticated user
+                $authUser = auth()->user();
+
+                /*
+                |--------------------------------------------------------------------------
+                | Role-Based Claim Visibility
+                |--------------------------------------------------------------------------
+                */
+
+                // Customer:
+                // Can view only their own claims
+                if ($authUser->role->name === 'Customer') {
+                    $query->where('user_id', $authUser->id);
+                }
+
+                // Agent:
+                // Can view claims only for quotes assigned to them
+                if ($authUser->role->name === 'Agent') {
+                    $query->whereHas('quote', function ($quoteQuery) use ($authUser) {
+                        $quoteQuery->where('agent_id', $authUser->id);
+                    });
+                }
+
+                // Admin:
+                // No restriction → can view all claims
+
+                /*
+                |--------------------------------------------------------------------------
+                | Filters
+                |--------------------------------------------------------------------------
+                */
+
+                // Filter by status
+                if (isset($filters['status'])) {
+
+                    $query->where('status', $filters['status']);
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | Return Paginated Claims
+                |--------------------------------------------------------------------------
+                */
+
+                return $query->with(['quote', 'user', 'documents']) ->paginate($filters['per_page'] ?? 15);
             }
-
-            //filter by user if customer
-            if (auth()->user()->role->name === 'Customer') {
-                $query->where('user_id', auth()->id());
-            }
-
-            return $query->with(['quote', 'user', 'documents'])->paginate($filters['per_page'] ?? 15);
-        });
+        );
     }
 
     // create claim (busts claims cache)
     public function createClaim($data)
     {
         return DB::transaction(function () use ($data) {
+
             Quote::syncExpiredQuotes();
 
-            // Business Rule: Claim can be created ONLY IF quote.status = APPROVED and is_delete = 0
-            $quote = Quote::withTrashed()->findOrFail($data['quote_id']);
+            /*
+            |--------------------------------------------------------------------------
+            | Get Authenticated User
+            |--------------------------------------------------------------------------
+            */
 
-            // check if quote is deleted
-            if ($quote->is_delete == 1 || $quote->trashed()) {
-                throw new \Exception('A claim cannot be created for a deleted quote.', 400);
+            $authUser = auth()->user();
+
+            /*
+            |--------------------------------------------------------------------------
+            | Prevent Inactive Users
+            |--------------------------------------------------------------------------
+            */
+
+            if (!$authUser->is_active) {
+                throw new \Exception('Your account is inactive. You cannot create claims.', 403);
             }
 
-            //check if quote is approved
+            /*
+            |--------------------------------------------------------------------------
+            | Get Quote
+            |--------------------------------------------------------------------------
+            */
+
+            // Claim can be created even if quote is soft deleted check is needed
+            $quote = Quote::withTrashed()->findOrFail($data['quote_id']);
+
+            /*
+            |--------------------------------------------------------------------------
+            | Agent Ownership Validation
+            |--------------------------------------------------------------------------
+            */
+
+            // Agent can create claim ONLY for quotes assigned to them
+            if ($authUser->role->name === 'Agent' && $quote->agent_id !== $authUser->id) {
+
+                throw new \Exception('You are not authorized to create claims for this quote.', 403);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Customer Ownership Validation
+            |--------------------------------------------------------------------------
+            */
+
+            // Customer can create claim ONLY for their own quotes
+            if ($authUser->role->name === 'Customer' && $quote->customer_user_id !== $authUser->id) {
+                throw new \Exception('You are not authorized to create claims for this quote.', 403);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Check Customer Status
+            |--------------------------------------------------------------------------
+            */
+
+            $customer = User::findOrFail($quote->customer_user_id);
+
+            if (!$customer->is_active) {
+                throw new \Exception('Cannot create claim for inactive customer.', 422);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Quote Validation
+            |--------------------------------------------------------------------------
+            */
+
+            // Claim allowed only for approved quotes
             if ($quote->status !== 'approved') {
                 throw new \Exception('A claim can only be created for an APPROVED quote.', 400);
             }
 
-            // check if quote has expired (valid up to 1 year from created_at)
+            // Prevent claim creation for expired quotes
             if ($quote->is_expired) {
                 throw new \Exception('A claim cannot be created for an expired quote.', 400);
             }
 
-            //check if total claim amount exceeds the policy coverage limit
+            /*
+            |--------------------------------------------------------------------------
+            | Coverage Validation
+            |--------------------------------------------------------------------------
+            */
+
+            // Total approved/pending claims must not exceed coverage
             $totalClaimed = Claim::where('quote_id', $quote->id)
-                ->whereIn('status', ['Pending', 'Under Review', 'Approved', 'Settled'])
+                ->whereIn('status', [
+                    'Pending',
+                    'Under Review',
+                    'Approved',
+                    'Settled'
+                ])
                 ->sum('claim_amount');
 
             if (($totalClaimed + $data['claim_amount']) > $quote->coverage_amount) {
-                throw new \Exception('Total claim amount exceeds the policy coverage limit of ' . $quote->coverage_amount, 422);
+                throw new \Exception(
+                    'Total claim amount exceeds the policy coverage limit of ' . $quote->coverage_amount,
+                    422
+                );
             }
 
-            //create claim
+            /*
+            |--------------------------------------------------------------------------
+            | Create Claim
+            |--------------------------------------------------------------------------
+            */
+
             $data['claim_number'] = 'CL-' . strtoupper(Str::random(8));
-            $data['user_id'] = auth()->id();
+
+            // Claim creator
+            $data['user_id'] = $authUser->id;
+
             $claim = Claim::create($data);
 
-            // Invalidate all cached claim listings so new claim appears immediately
+            /*
+            |--------------------------------------------------------------------------
+            | Clear Cache
+            |--------------------------------------------------------------------------
+            */
+
             Cache::tags(['claims'])->flush();
 
             return $claim;
@@ -95,12 +219,43 @@ class ClaimService
     // get claim by id
     public function getClaimById($id)
     {
-        $claim = Claim::with(['quote', 'user', 'documents'])->findOrFail($id);
+        $claim = Claim::with([
+            'quote',
+            'user',
+            'documents'
+        ])->findOrFail($id);
 
-        // Security check for customers
-        if (auth()->user()->role->name === 'Customer' && $claim->user_id !== auth()->id()) {
+        $authUser = auth()->user();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Customer Access Control
+        |--------------------------------------------------------------------------
+        */
+
+        // Customer can view only their own claims
+        if ($authUser->role->name === 'Customer' && $claim->user_id !== $authUser->id) {
             throw new \Exception('Unauthorized access to this claim', 403);
         }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Agent Access Control
+        |--------------------------------------------------------------------------
+        */
+
+        // Agent can view only claims belonging to quotes assigned to them
+        if ($authUser->role->name === 'Agent' && $claim->quote->agent_id !== $authUser->id) {
+            throw new \Exception('Unauthorized access to this claim', 403);
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Admin Access
+        |--------------------------------------------------------------------------
+        */
+
+        // Admin has unrestricted access
 
         return $claim;
     }
@@ -109,7 +264,49 @@ class ClaimService
     public function updateClaimStatus($id, $status)
     {
         return DB::transaction(function () use ($id, $status) {
-            $claim = Claim::findOrFail($id);
+
+            $claim = Claim::with('quote')->findOrFail($id);
+
+            $authUser = auth()->user();
+
+            /*
+            |--------------------------------------------------------------------------
+            | Active User Validation
+            |--------------------------------------------------------------------------
+            */
+
+            // Prevent inactive users from updating claim status
+            if (!$authUser->is_active) {
+                throw new \Exception('Your account is inactive. You cannot update claim status.', 403);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Customer Restriction
+            |--------------------------------------------------------------------------
+            */
+
+            // Customers are not allowed to update claim status
+            if ($authUser->role->name === 'Customer') {
+                throw new \Exception('Customers are not allowed to update claim status.', 403);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Agent Ownership Validation
+            |--------------------------------------------------------------------------
+            */
+
+            // Agent can update status only for claims assigned to their quotes
+            if ($authUser->role->name === 'Agent' && $claim->quote->agent_id !== $authUser->id) {
+                throw new \Exception('You are not authorized to update this claim status.', 403);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Valid Status Transitions
+            |--------------------------------------------------------------------------
+            */
 
             // Define allowed forward transitions
             $validTransitions = [
@@ -120,20 +317,39 @@ class ClaimService
                 'Settled'      => [], // Terminal state
             ];
 
-            //check if status is valid
             $previousStatus = $claim->status;
 
+            // Validate status transition
             if (!in_array($status, $validTransitions[$previousStatus] ?? [])) {
                 throw new \Exception("Invalid status transition from {$previousStatus} to {$status}.", 422);
             }
 
-            $claim->update(['status' => $status]);
+            /*
+            |--------------------------------------------------------------------------
+            | Update Claim Status
+            |--------------------------------------------------------------------------
+            */
 
-            // Invalidate all cached claim listings so updated status appears immediately
+            $claim->update([
+                'status' => $status
+            ]);
+
+            /*
+            |--------------------------------------------------------------------------
+            | Clear Cache
+            |--------------------------------------------------------------------------
+            */
+
+            // Invalidate all cached claim listings
             Cache::tags(['claims'])->flush();
 
-            // Dispatch background job to email the customer about the status change
-            // API returns 200 OK instantly; email sends asynchronously via queue worker
+            /*
+            |--------------------------------------------------------------------------
+            | Send Notification
+            |--------------------------------------------------------------------------
+            */
+
+            // Dispatch email notification asynchronously
             SendClaimStatusNotificationJob::dispatch($claim, $previousStatus, $status);
 
             return $claim;
@@ -144,12 +360,57 @@ class ClaimService
     public function updateClaim($id, $data)
     {
         return DB::transaction(function () use ($id, $data) {
-            $claim = $this->getClaimById($id);
-            $previousStatus = $claim->status;
-            $statusChanged  = false;
 
-            //update status if changed
+            $claim = $this->getClaimById($id);
+
+            $authUser = auth()->user();
+
+            /*
+            |--------------------------------------------------------------------------
+            | Active User Validation
+            |--------------------------------------------------------------------------
+            */
+
+            // Prevent inactive users from updating claims
+            if (!$authUser->is_active) {
+                throw new \Exception('Your account is inactive. You cannot update claims.', 403);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Agent Ownership Validation
+            |--------------------------------------------------------------------------
+            */
+
+            // Agent can update only claims belonging to quotes assigned to them
+            if ($authUser->role->name === 'Agent' && $claim->quote->agent_id !== $authUser->id) {
+                throw new \Exception('You are not authorized to update this claim.', 403);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Customer Update Restriction
+            |--------------------------------------------------------------------------
+            */
+
+            // Customer cannot update claims
+            if ($authUser->role->name === 'Customer') {
+                throw new \Exception('Customers are not allowed to update claims.', 403);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Status Transition Validation
+            |--------------------------------------------------------------------------
+            */
+
+            $previousStatus = $claim->status;
+
+            $statusChanged = false;
+
+            // Update status if changed
             if (isset($data['status']) && $data['status'] !== $claim->status) {
+
                 $validTransitions = [
                     'Pending'      => ['Under Review', 'Rejected'],
                     'Under Review' => ['Approved', 'Rejected'],
@@ -158,9 +419,9 @@ class ClaimService
                     'Settled'      => [], // Terminal state
                 ];
 
-                //check if status is valid
                 $newStatus = $data['status'];
 
+                // Check valid transition
                 if (!in_array($newStatus, $validTransitions[$previousStatus] ?? [])) {
                     throw new \Exception("Invalid status transition from {$previousStatus} to {$newStatus}.", 422);
                 }
@@ -168,26 +429,49 @@ class ClaimService
                 $statusChanged = true;
             }
 
-            //update claim amount if changed
+            /*
+            |--------------------------------------------------------------------------
+            | Claim Amount Validation
+            |--------------------------------------------------------------------------
+            */
+
+            // Validate updated claim amount
             if (isset($data['claim_amount']) && $data['claim_amount'] != $claim->claim_amount) {
-                $totalClaimed = Claim::where('quote_id', $claim->quote_id)
-                    ->where('id', '!=', $id) // Exclude current claim
+
+                $totalClaimed = Claim::where('quote_id', $claim->quote_id)->where('id', '!=', $id)
                     ->whereIn('status', ['Pending', 'Under Review', 'Approved', 'Settled'])
                     ->sum('claim_amount');
 
-                //check if total claim amount exceeds the policy coverage limit
+                // Prevent exceeding coverage limit
                 if (($totalClaimed + $data['claim_amount']) > $claim->quote->coverage_amount) {
+
                     throw new \Exception('Total claim amount exceeds the policy coverage limit of ' . $claim->quote->coverage_amount, 422);
                 }
             }
 
-            //update claim
+            /*
+            |--------------------------------------------------------------------------
+            | Update Claim
+            |--------------------------------------------------------------------------
+            */
+
             $claim->update($data);
 
-            // Invalidate all cached claim listings so updated data appears immediately
+            /*
+            |--------------------------------------------------------------------------
+            | Clear Cache
+            |--------------------------------------------------------------------------
+            */
+
             Cache::tags(['claims'])->flush();
 
-            // Dispatch email notification if status was changed
+            /*
+            |--------------------------------------------------------------------------
+            | Send Notification
+            |--------------------------------------------------------------------------
+            */
+
+            // Dispatch email notification if status changed
             if ($statusChanged) {
                 SendClaimStatusNotificationJob::dispatch($claim, $previousStatus, $data['status']);
             }

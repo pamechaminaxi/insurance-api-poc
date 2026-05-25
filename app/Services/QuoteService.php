@@ -34,13 +34,17 @@ class QuoteService
 
         return Cache::tags(['quotes'])->remember($cacheKey, self::CACHE_TTL, function () use ($filters) {
 
-            $query = Quote::query()->with(['customer', 'creator']);
+            $query = Quote::query()->with(['customer', 'creator', 'agent']);
 
             // Role-based filtering
             $user = auth()->user();
 
             if ($user->role->name === 'Customer') {
                 $query->where('customer_user_id', $user->id);
+            }
+
+            if ($user->role->name === 'Agent') {
+                $query->where('agent_id', $user->id);
             }
 
             // filter by status
@@ -73,34 +77,116 @@ class QuoteService
     public function createQuote($data)
     {
         return DB::transaction(function () use ($data) {
+
+            // Check authenticated user
+            $authUser = auth()->user();
+
+            // Prevent inactive admin/agent from creating quotes
+            if (!$authUser->is_active) {
+
+                throw new \Exception(
+                    'Your account is inactive. You cannot create quotes.',
+                    403
+                );
+            }
+
+            // Check customer exists
+            $customer = User::findOrFail($data['customer_user_id']);
+
+            // Prevent quote creation for inactive customer
+            if (!$customer->is_active) {
+
+                throw new \Exception(
+                    'Cannot create quote for inactive customer.',
+                    422
+                );
+            }
+
+            // If logged-in user is Agent
+            // automatically assign agent_id
+            if ($authUser->role->name === 'Agent') {
+
+                $data['agent_id'] = $authUser->id;
+            }
+
+            // Validate assigned agent if admin selected
+            if (isset($data['agent_id'])) {
+
+                $agent = User::findOrFail($data['agent_id']);
+
+                // Check selected user role
+                if ($agent->role->name !== 'Agent') {
+
+                    throw new \Exception(
+                        'Selected user is not an agent.',
+                        422
+                    );
+                }
+
+                // Check selected agent status
+                if (!$agent->is_active) {
+
+                    throw new \Exception(
+                        'Cannot assign inactive agent.',
+                        422
+                    );
+                }
+            }
+
+            // Sync expired quotes
             Quote::syncExpiredQuotes();
 
-            // Check if there is already an active quote for the same customer and insurance type in any status
-            $existingQuote = Quote::where('customer_user_id', $data['customer_user_id'])
-                ->where('insurance_type', $data['insurance_type'])
+            // Check if there is already an active quote
+            // for same customer + insurance type
+            $existingQuote = Quote::where(
+                    'customer_user_id',
+                    $data['customer_user_id']
+                )
+                ->where(
+                    'insurance_type',
+                    $data['insurance_type']
+                )
                 ->where('is_expired', false)
                 ->first();
 
             if ($existingQuote) {
+
                 if ($existingQuote->status === 'rejected') {
-                    throw new \Exception('A quote for this customer with the same insurance type has been previously rejected, and cannot be re-created.', 422);
+
+                    throw new \Exception(
+                        'A quote for this customer with the same insurance type has been previously rejected, and cannot be re-created.',
+                        422
+                    );
                 }
-                throw new \Exception('A quote for this customer with the same insurance type already exists.', 422);
+
+                throw new \Exception(
+                    'A quote for this customer with the same insurance type already exists.',
+                    422
+                );
             }
 
+            // Generate quote details
             $data['quote_number'] = 'QT-' . strtoupper(Str::random(8));
-            $data['created_by'] = auth()->id();
-            $data['status'] = 'draft'; // Explicitly set to draft on creation
 
+            // Store creator user id
+            $data['created_by'] = $authUser->id;
+
+            // Default status
+            $data['status'] = 'draft';
+
+            // Create quote
             $quote = Quote::forceCreate($data);
 
-            // Invalidate all cached quote listings so new quote appears immediately
+            // Clear cache
             Cache::tags(['quotes'])->flush();
 
-            // Dispatch background job to notify the customer that a quote was created for them
-            // Only notify if the quote has a linked customer account
+            // Dispatch notification job
             if ($quote->customer_user_id) {
-                SendQuoteNotificationJob::dispatch($quote, 'created');
+
+                SendQuoteNotificationJob::dispatch(
+                    $quote,
+                    'created'
+                );
             }
 
             return $quote;
@@ -110,10 +196,14 @@ class QuoteService
     // get quote by id
     public function getQuoteById($id)
     {
-        $quote = Quote::with(['customer', 'creator', 'claims'])->findOrFail($id);
+        $quote = Quote::with(['customer', 'creator', 'agent', 'claims'])->findOrFail($id);
 
         // Security check for customers
         if (auth()->user()->role->name === 'Customer' && $quote->customer_user_id !== auth()->id()) {
+            throw new \Exception('Unauthorized access to this quote', 403);
+        }
+
+        if (auth()->user()->role->name === 'Agent' && $quote->agent_id !== auth()->id()) {
             throw new \Exception('Unauthorized access to this quote', 403);
         }
 
@@ -124,18 +214,39 @@ class QuoteService
     public function updateQuote($id, $data)
     {
         return DB::transaction(function () use ($id, $data) {
+            // Sync expired quotes
             Quote::syncExpiredQuotes();
 
+            // Get authenticated user
+            $authUser = auth()->user();
+
+            // Find quote
             $quote = Quote::findOrFail($id);
+
             $previousStatus = $quote->status;
 
-            // Check if quote has expired (valid up to 1 year from created_at)
+            // Prevent inactive admin/agent from updating quote
+            if (!$authUser->is_active) {
+                throw new \Exception('Your account is inactive. You cannot update quotes.', 403);
+            }
+
+            // Agent can update only their own assigned quotes
+            if ($authUser->role->name === 'Agent' && $quote->agent_id !== $authUser->id) {
+                throw new \Exception('You are not authorized to update this quote.', 403);
+            }
+
+            // Agents cannot reassign quotes
+            if ($authUser->role->name === 'Agent' && isset($data['agent_id'])) {
+                throw new \Exception('Agents cannot reassign quotes.', 403);
+            }
+
+            // Check if quote has expired
             if ($quote->is_expired) {
                 throw new \Exception('This quote has expired.', 422);
             }
 
-            // Business Rule: Agent can only edit if status is 'draft'
-            if ($quote->status !== 'draft' && auth()->user()->role->name === 'Agent') {
+            // Agent can only edit draft quotes
+            if ($quote->status !== 'draft' && $authUser->role->name === 'Agent') {
                 throw new \Exception('Quote can only be edited when in draft status.', 403);
             }
 

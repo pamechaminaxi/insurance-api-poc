@@ -24,21 +24,96 @@ class UpdateQuoteRequest extends FormRequest
     public function rules(): array
     {
         return [
-            // 'customer_name' => 'sometimes|string|max:255',
             'insurance_type' => 'sometimes|in:health,life,motor',
+
             'premium_amount' => 'sometimes|numeric|min:1',
+
             'coverage_amount' => 'sometimes|numeric|min:1',
+
             'status' => 'sometimes|in:draft,submitted,approved,rejected',
+
+            /*
+            |--------------------------------------------------------------------------
+            | Customer Validation
+            |--------------------------------------------------------------------------
+            */
+
             'customer_user_id' => [
-                'required',
+
+                'sometimes',
                 'exists:users,id',
+
                 function ($attribute, $value, $fail) {
+
                     $user = User::find($value);
-                    if ($user && $user->role->name !== 'Customer') {
-                        $fail('The selected customer user ID must belong to a user with the customer role.');
+
+                    // Must be customer
+                    if (
+                        $user
+                        &&
+                        $user->role->name !== 'Customer'
+                    ) {
+
+                        $fail(
+                            'The selected customer must have Customer role.'
+                        );
+                    }
+
+                    // Customer must be active
+                    if (
+                        $user
+                        &&
+                        !$user->is_active
+                    ) {
+
+                        $fail(
+                            'Cannot assign quote to inactive customer.'
+                        );
+                    }
+                },
+            ],
+
+            /*
+            |--------------------------------------------------------------------------
+            | Agent Validation
+            |--------------------------------------------------------------------------
+            */
+
+            'agent_id' => [
+
+                'sometimes',
+                'exists:users,id',
+
+                function ($attribute, $value, $fail) {
+
+                    $agent = User::find($value);
+
+                    // Must be agent
+                    if (
+                        $agent
+                        &&
+                        $agent->role->name !== 'Agent'
+                    ) {
+
+                        $fail(
+                            'The selected user must have Agent role.'
+                        );
+                    }
+
+                    // Agent must be active
+                    if (
+                        $agent
+                        &&
+                        !$agent->is_active
+                    ) {
+
+                        $fail(
+                            'Cannot assign inactive agent.'
+                        );
                     }
                 },
             ],
         ];
     }
 }
+

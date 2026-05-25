@@ -17,7 +17,16 @@ trait LogsActivity
 
             // check model class and log activity
             if ($modelClass === \App\Models\Quote::class) {
-                $action = "Quote {$model->quote_number} was created for customer '{$model->customer_name}'.";
+
+                // Load customer relationship
+                $model->load('customer');
+
+                // Get customer name safely
+                $customerName = $model->customer
+                    ? $model->customer->name
+                    : 'Unknown Customer';
+
+                $action = "Quote {$model->quote_number} was created for customer '{$customerName}'.";
 
                 // Convert model to array
                 $newValue = $model->toArray();
@@ -26,11 +35,21 @@ trait LogsActivity
                 unset(
                     $newValue['id'],
                     $newValue['customer_user_id'],
-                    $newValue['created_by']
+                    $newValue['created_by'],
+                    $newValue['agent_id']
                 );
 
-                self::logActivity($action, null, $newValue);
+                // Optional: remove nested customer sensitive data
+                if (isset($newValue['customer'])) {
+                    unset(
+                        $newValue['customer']['id'],
+                        $newValue['customer']['password'],
+                        $newValue['customer']['remember_token'],
+                        $newValue['customer']['role_id']
+                    );
+                }
 
+                self::logActivity($action, null, $newValue);
             } elseif ($modelClass === \App\Models\ClaimDocument::class) {
                 $model->load('claim');
                 $claimNumber = $model->claim ? $model->claim->claim_number : "ID: {$model->claim_id}";

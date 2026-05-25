@@ -18,9 +18,10 @@ Route::prefix('auth')->middleware('throttle:api')->group(function () {
     Route::post('reset-password', [AuthController::class, 'resetPassword']);
 
     // Protected
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware(['auth:sanctum', 'active'])->group(function () {
         // Admin Only: Register new users
         Route::post('register', [AuthController::class, 'register'])->middleware('role:Admin');
+        Route::patch('users/{id}/status', [AuthController::class, 'updateStatus'])->middleware('role:Admin');
 
         // Any logged-in user
         Route::post('logout', [AuthController::class, 'logout']);
@@ -33,7 +34,7 @@ Route::prefix('auth')->middleware('throttle:api')->group(function () {
 | PROTECTED API ROUTES
 |--------------------------------------------------------------------------
 |*/
-Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
+Route::middleware(['auth:sanctum', 'throttle:api','active'])->group(function () {
 
     // Quote Routes
     Route::prefix('quotes')->group(function () {
