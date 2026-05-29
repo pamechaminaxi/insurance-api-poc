@@ -13,10 +13,11 @@ use App\Http\Requests\Auth\ResetPasswordRequest;
 use App\Http\Requests\Auth\UpdateUserStatusRequest;
 use App\Models\ActivityLog;
 
+
 class AuthController extends Controller
 {
     protected $authService;
-
+    
     // Inject dependencies through constructor method for better testability and maintainability. 
     public function __construct(AuthService $authService)
     {
@@ -26,7 +27,6 @@ class AuthController extends Controller
     //register user method with validation [RegisterRequest] using service
     public function register(RegisterRequest $request)
     {
-
         try {
             $data = $this->authService->register($request);
             return ApiResponse::success('User registered', $data, 201);
@@ -38,9 +38,10 @@ class AuthController extends Controller
     //login method with validation [LoginRequest] using service and login user
     public function login(LoginRequest $request)
     {
+        // dd($request);
         try {
             $data = $this->authService->login($request);
-
+            // dd($data);
             ActivityLog::log("User logged in successfully (Email: " . auth()->user()->email . ")");
 
             return ApiResponse::success('Login successful', $data);

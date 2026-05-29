@@ -24,7 +24,7 @@ class Quote extends Model
         'customer_user_id',
         'agent_id',
         'created_by',
-        'is_delete',
+        // 'is_delete',
         'is_expired',
     ];
 
@@ -53,55 +53,6 @@ class Quote extends Model
             ->update(['is_expired' => true]);
     }
 
-    /**
-     * Override runSoftDelete to also update the is_delete column.
-     */
-    protected function runSoftDelete()
-    {
-        $query = $this->setKeysForSaveQuery($this->newModelQuery());
-
-        $time = $this->fromDateTime($this->freshTimestamp());
-
-        $columns = [
-            $this->getDeletedAtColumn() => $time,
-            'is_delete' => 1,
-        ];
-
-        $this->{$this->getDeletedAtColumn()} = $time;
-        $this->is_delete = 1;
-
-        if ($this->timestamps && ! is_null($this->getUpdatedAtColumn())) {
-            $this->{$this->getUpdatedAtColumn()} = $time;
-
-            $columns[$this->getUpdatedAtColumn()] = $this->fromDateTime($time);
-        }
-
-        $query->update($columns);
-
-        $this->syncOriginalAttributes(array_keys($columns));
-    }
-
-    /**
-     * Override restore to reset is_delete to 0.
-     */
-    public function restore()
-    {
-        if ($this->fireModelEvent('restoring') === false) {
-            return false;
-        }
-
-        $this->{$this->getDeletedAtColumn()} = null;
-        $this->is_delete = 0;
-
-        $this->exists = true;
-
-        $result = $this->save();
-
-        $this->fireModelEvent('restored', false);
-
-        return $result;
-    }
-
     // customer relationship
     public function customer()
     {
@@ -126,4 +77,3 @@ class Quote extends Model
         return $this->belongsTo(User::class, 'agent_id');
     }
 }
-

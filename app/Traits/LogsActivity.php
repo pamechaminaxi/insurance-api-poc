@@ -14,10 +14,10 @@ trait LogsActivity
         static::created(function ($model) {
             $modelClass = get_class($model);
             $action = null;
-
+            
             // check model class and log activity
             if ($modelClass === \App\Models\Quote::class) {
-
+                
                 // Load customer relationship
                 $model->load('customer');
 

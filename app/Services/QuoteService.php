@@ -58,10 +58,10 @@ class QuoteService
                 $search = $filters['search'];
 
                 $query->where(function ($q) use ($search) {
-
+                    
                     // search by quote number
                     $q->where('quote_number', 'like', '%' . $search . '%')
-
+                    
                     // search by customer name from users table
                     ->orWhereHas('customer', function ($customerQuery) use ($search) {
                         $customerQuery->where('name', 'like', '%' . $search . '%');
@@ -69,7 +69,8 @@ class QuoteService
                 });
             }
 
-            return $query->paginate($filters['per_page'] ?? 15);
+            $paginator = $query->paginate($filters['per_page'] ?? 15);
+            return $paginator->toArray();
         });
     }
 

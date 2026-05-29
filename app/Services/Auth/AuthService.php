@@ -36,35 +36,81 @@ class AuthService
             ];
         });
     }
-
+    
     // login user method
     public function login($request)
     {
         if (!Auth::attempt($request->only('email', 'password'))) {
             throw new \Exception('Invalid credentials');
         }
-
+        
         return DB::transaction(function () {
-
+            
             $user = Auth::user();
-
+            
             // CHECK USER STATUS
             if (!$user->is_active) {
-
+                
                 Auth::logout();
-
+                
                 throw new \Exception('Your account is inactive. Please contact admin.');
             }
 
-            $token = $user->createToken('API Token')->plainTextToken;
+            /*
+            |--------------------------------------------------------------------------
+            | Check Existing Active Token
+            |--------------------------------------------------------------------------
+            */
+
+            $existingToken = $user->tokens()
+                ->where('expires_at', '>', now())
+                ->first();
+
+            if ($existingToken) {
+
+                Auth::logout();
+
+                throw new \Exception(
+                    'User already logged in. Please logout first or wait until token expires.'
+                );
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Delete Expired Tokens
+            |--------------------------------------------------------------------------
+            */
+
+            $user->tokens()
+                ->where('expires_at', '<=', now())
+                ->delete();
+
+            /*
+            |--------------------------------------------------------------------------
+            | Create New Token
+            |--------------------------------------------------------------------------
+            */
+
+            $tokenResult = $user->createToken('API Token');
+
+            // Get latest created token
+            $tokenModel = $user->tokens()->latest()->first();
+
+            // Store expiry time
+            $tokenModel->update([
+                'expires_at' => now()->addMinutes(
+                    config('sanctum.expiration')
+                    // 2
+                )
+            ]);
 
             return [
-                'user' => $user,
-                'token' => $token
+                'token' => $tokenResult->plainTextToken,
+                'expires_at' => $tokenModel->expires_at
             ];
         });
     }
-
+    
     // logout user method
     public function logout($user)
     {

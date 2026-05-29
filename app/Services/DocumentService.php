@@ -12,22 +12,22 @@ class DocumentService
     public function uploadDocuments($claimId, $files)
     {
         $storedFiles = [];
-
+        
         try {
             //DB Transaction for atomicity (all or nothing)
             $uploadedDocs = DB::transaction(function () use ($claimId, $files, &$storedFiles) {
 
+                
                 $uploadedDocs = [];
-
                 // loop through files and upload
                 foreach ($files as $file) {
-
+                    
                     // store file
                     $path = $file->store('claims', 'public');
-
+                    
                     // track stored files
                     $storedFiles[] = $path;
-
+                    
                     // create DB record
                     $uploadedDocs[] = ClaimDocument::create([
                         'claim_id' => $claimId,
@@ -37,14 +37,14 @@ class DocumentService
                         'file_size' => $file->getSize(),
                     ]);
                 }
-
+                
                 return $uploadedDocs;
             });
-
+            
             return $uploadedDocs;
-
+            
         } catch (\Exception $e) {
-
+            
             // delete uploaded files if DB fails
             foreach ($storedFiles as $path) {
                 // check if file exists before deleting
@@ -52,7 +52,7 @@ class DocumentService
                     Storage::disk('public')->delete($path);
                 }
             }
-
+            
             throw $e;
         }
     }

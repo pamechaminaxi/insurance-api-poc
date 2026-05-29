@@ -3,6 +3,7 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Laravel\Sanctum\PersonalAccessToken;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -44,11 +45,65 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         });
 
+
         $exceptions->render(function (\Illuminate\Auth\AuthenticationException $e, $request) {
+
             if ($request->is('api/*')) {
-                return \App\Helpers\ApiResponse::error('Unauthenticated', 401);
+
+                $bearerToken = $request->bearerToken();
+
+                /*
+                |--------------------------------------------------------------------------
+                | Check Expired Token
+                |--------------------------------------------------------------------------
+                */
+
+                if ($bearerToken) {
+
+                    $tokenParts = explode('|', $bearerToken);
+
+                    if (count($tokenParts) === 2) {
+
+                        $token = PersonalAccessToken::find($tokenParts[0]);
+
+                        if ($token) {
+
+                            $expired = $token->created_at
+                                ->addMinutes(config('sanctum.expiration'))
+                                ->isPast();
+
+                            if ($expired) {
+
+                                // Delete expired token
+                                $token->delete();
+
+                                return \App\Helpers\ApiResponse::error(
+                                    'Token expired. Please login again.',
+                                    401
+                                );
+                            }
+                        }
+                    }
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | Invalid / Missing Token
+                |--------------------------------------------------------------------------
+                */
+
+                return \App\Helpers\ApiResponse::error(
+                    'Unauthenticated',
+                    401
+                );
             }
         });
+
+        // $exceptions->render(function (\Illuminate\Auth\AuthenticationException $e, $request) {
+        //     if ($request->is('api/*')) {
+        //         return \App\Helpers\ApiResponse::error('Unauthenticated', 401);
+        //     }
+        // });
 
         $exceptions->render(function (\Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException $e, $request) {
             if ($request->is('api/*')) {

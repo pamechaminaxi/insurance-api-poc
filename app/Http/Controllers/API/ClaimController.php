@@ -36,17 +36,16 @@ class ClaimController extends Controller
             return ApiResponse::error($e->getMessage());
         }
     }
-
+    
     //create claim using service and validate request using form requests
     public function store(StoreClaimRequest $request)
     {
         try {
             $claim = $this->claimService->createClaim($request->validated());
-
+            
             if ($request->hasFile('documents')) {
                 $this->documentService->uploadDocuments($claim->id, $request->file('documents'));
             }
-
             return ApiResponse::success('Claim filed successfully', $claim->load('documents'), 201);
         } catch (\Exception $e) {
             return ApiResponse::error($e->getMessage());
@@ -71,14 +70,14 @@ class ClaimController extends Controller
             $request->validate([
                 'status' => 'required|in:Pending,Under Review,Approved,Rejected,Settled'
             ]);
-
+            
             $claim = $this->claimService->updateClaimStatus($id, $request->status);
             return ApiResponse::success('Claim status updated', $claim);
         } catch (\Exception $e) {
             return ApiResponse::error($e->getMessage(), $e->getCode() ?: 400);
         }
     }
-
+    
     //update claim using service and validate request using form requests 
     public function update(UpdateClaimRequest $request, $id)
     {
@@ -88,5 +87,6 @@ class ClaimController extends Controller
         } catch (\Exception $e) {
             return ApiResponse::error($e->getMessage(), $e->getCode() ?: 400);
         }
-    }
+    }    
 }
+
